@@ -10,12 +10,8 @@ import javax.servlet.ServletRequest;
 import javax.servlet.http.HttpServlet;
 import javax.servlet.http.HttpServletRequest;
 import javax.servlet.http.HttpServletResponse;
+import javax.servlet.http.HttpSession;
 
-import java.sql.Connection;
-import java.sql.DriverManager;
-import java.sql.Statement;
-import java.sql.PreparedStatement;
- 
 /**
  * ControllerServlet.java
  * This servlet acts as a page controller for the application, handling all
@@ -23,11 +19,12 @@ import java.sql.PreparedStatement;
  * @author www.codejava.net
  */
 public class ControlServlet extends HttpServlet {
-    private static final long serialVersionUID = 1L;
-    private PeopleDAO peopleDAO;
+	private static final long serialVersionUID = 1L;
+    private JokesDAO jokesDAO;
+    HttpSession session;
  
     public void init() {
-        peopleDAO = new PeopleDAO(); 
+        jokesDAO = new JokesDAO(); 
     }
  
     protected void doPost(HttpServletRequest request, HttpServletResponse response)
@@ -37,27 +34,28 @@ public class ControlServlet extends HttpServlet {
  
     protected void doGet(HttpServletRequest request, HttpServletResponse response)
             throws ServletException, IOException {
+    	session = request.getSession();
         String action = request.getServletPath();
         System.out.println(action);
         try {
             switch (action) {
-            case "/new":
-                showNewForm(request, response);
+            case "/home":
+            	showHome(request, response);
                 break;
-            case "/insert":
-            	insertPeople(request, response);
+            case "/login":
+            	checkLogin(request, response);
                 break;
-            case "/delete":
-            	deletePeople(request, response);
+            case "/register-user":
+            	registerUser(request, response);
                 break;
-            case "/edit":
-                showEditForm(request, response);
+            case "/logout":
+            	logout(request, response);
                 break;
-            case "/update":
-            	updatePeople(request, response);
+            case "/initdb":
+            	initDB(request, response);
                 break;
             default:          	
-            	listPeople(request, response);           	
+            	showHome(request, response);           	
                 break;
             }
         } catch (SQLException ex) {
@@ -65,62 +63,71 @@ public class ControlServlet extends HttpServlet {
         }
     }
     
-    private void listPeople(HttpServletRequest request, HttpServletResponse response)
+    private void registerUser(HttpServletRequest request, HttpServletResponse response)
             throws SQLException, IOException, ServletException {
-        List<People> listPeople = peopleDAO.listAllPeople();
-        request.setAttribute("listPeople", listPeople);       
-        RequestDispatcher dispatcher = request.getRequestDispatcher("PeopleList.jsp");       
+    	String firstName = request.getParameter("first_name");
+    	String lastName = request.getParameter("last_name");
+    	String email = request.getParameter("email");
+    	int age = Integer.parseInt(request.getParameter("age"));
+    	String gender = request.getParameter("gender");
+    	String username = request.getParameter("username");
+    	String password = request.getParameter("password");
+    	
+    	RequestDispatcher dispatcher;
+    	
+    	if (jokesDAO.register(firstName, lastName, email, age, gender, username, password)) {
+    		session.setAttribute("loggedIn", true);
+    	} else {
+    		session.removeAttribute("loggedIn");
+    	}
+    	
+        dispatcher = request.getRequestDispatcher("index.jsp");   
         dispatcher.forward(request, response);
     }
- 
-    private void showNewForm(HttpServletRequest request, HttpServletResponse response)
+    
+    private void checkLogin(HttpServletRequest request, HttpServletResponse response)
+            throws SQLException, IOException, ServletException {
+    	String username = request.getParameter("username");
+    	String password = request.getParameter("password");
+    	RequestDispatcher dispatcher;
+    	
+    	if (jokesDAO.login(username, password)) {
+    		session.setAttribute("loggedIn", true);
+    	} else {
+    		session.removeAttribute("loggedIn");
+    	}
+    	
+        dispatcher = request.getRequestDispatcher("index.jsp");   
+        dispatcher.forward(request, response);
+    }
+    
+    private void logout(HttpServletRequest request, HttpServletResponse response)
+            throws SQLException, IOException, ServletException {
+    	RequestDispatcher dispatcher;
+        session.removeAttribute("loggedIn");
+        dispatcher = request.getRequestDispatcher("index.jsp");   
+        dispatcher.forward(request, response);
+    }
+    
+    private void showHome(HttpServletRequest request, HttpServletResponse response)
             throws ServletException, IOException {
-        RequestDispatcher dispatcher = request.getRequestDispatcher("PeopleForm.jsp");
+        RequestDispatcher dispatcher = request.getRequestDispatcher("index.jsp");
         dispatcher.forward(request, response);
     }
- 
-    private void showEditForm(HttpServletRequest request, HttpServletResponse response)
-            throws SQLException, ServletException, IOException {
-        int id = Integer.parseInt(request.getParameter("id"));
-        People existingPeople = peopleDAO.getPeople(id);
-        RequestDispatcher dispatcher = request.getRequestDispatcher("PeopleForm.jsp");
-        request.setAttribute("people", existingPeople);
+    
+    private void showLoginForm(HttpServletRequest request, HttpServletResponse response)
+            throws ServletException, IOException {
+        RequestDispatcher dispatcher = request.getRequestDispatcher("index.jsp");
         dispatcher.forward(request, response);
- 
     }
- 
-    private void insertPeople(HttpServletRequest request, HttpServletResponse response)
-            throws SQLException, IOException {
-        String name = request.getParameter("name");
-        String address = request.getParameter("address");
-        String status = request.getParameter("status");
-        People newPeople = new People(name, address, status);
-        peopleDAO.insert(newPeople);
-        response.sendRedirect("list");
+    
+    private void initDB(HttpServletRequest request, HttpServletResponse response)
+            throws ServletException, IOException {
+    	boolean databaseInitialized = jokesDAO.initializeDatabase();
+    	request.setAttribute("databaseInitialized", Boolean.toString(databaseInitialized));
+        RequestDispatcher dispatcher = request.getRequestDispatcher("initdb.jsp");
+        dispatcher.forward(request, response);
     }
- 
-    private void updatePeople(HttpServletRequest request, HttpServletResponse response)
-            throws SQLException, IOException {
-        int id = Integer.parseInt(request.getParameter("id"));
-        
-        System.out.println(id);
-        String name = request.getParameter("name");
-        String address = request.getParameter("address");
-        String status = request.getParameter("status");
-        
-        System.out.println(name);
-        
-        People people = new People(id,name, address, status);
-        peopleDAO.update(people);
-        response.sendRedirect("list");
-    }
- 
-    private void deletePeople(HttpServletRequest request, HttpServletResponse response)
-            throws SQLException, IOException {
-        int id = Integer.parseInt(request.getParameter("id"));
-        //People people = new People(id);
-        peopleDAO.delete(id);
-        response.sendRedirect("list"); 
-    }
-
+    
+    
 }
